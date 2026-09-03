@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { CHAT_MAX_MESSAGES } from "@/lib/constants";
 import type { CharacterContext, ChatMessage, ChatStreamEvent } from "@/types/chat";
 
 function createId(): string {
@@ -44,11 +45,16 @@ export function useChat({ activeCharacter }: UseChatOptions) {
       setPendingToolCall(null);
 
       try {
+        // The UI keeps the full conversation, but only the most recent
+        // messages are sent - the server enforces the same cap and would
+        // otherwise reject a long-running chat outright once it's exceeded.
+        const recentHistory = history.slice(-CHAT_MAX_MESSAGES);
+
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            messages: history.map(({ role, content: text }) => ({ role, content: text })),
+            messages: recentHistory.map(({ role, content: text }) => ({ role, content: text })),
             characterContext: activeCharacter ?? undefined,
           }),
         });

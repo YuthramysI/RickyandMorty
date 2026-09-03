@@ -28,8 +28,12 @@ export async function POST(request: Request) {
 
   const parsed = chatRequestSchema.safeParse(body);
   if (!parsed.success) {
+    const firstIssue = parsed.error.issues[0];
     return NextResponse.json(
-      { error: "Invalid request.", details: parsed.error.flatten() },
+      {
+        error: firstIssue ? `Invalid request: ${firstIssue.message}.` : "Invalid request.",
+        details: parsed.error.flatten(),
+      },
       { status: 400 },
     );
   }
