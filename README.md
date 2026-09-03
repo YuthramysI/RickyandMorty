@@ -92,5 +92,3 @@ If you're on a character's detail page, the client includes that character's id 
 ## License
 
 MIT - see [LICENSE](LICENSE).
-# RickyandMorty
-# RickyandMorty
