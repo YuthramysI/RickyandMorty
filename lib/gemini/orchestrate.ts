@@ -1,14 +1,15 @@
 import {
   createModelContent,
-  createPartFromFunctionCall,
   createPartFromFunctionResponse,
   createUserContent,
   type Content,
   type FunctionCall,
+  type Part,
 } from "@google/genai";
 import { getGeminiClient } from "./client";
 import { toolDeclarations, toolHandlers } from "./tools";
 import { buildSystemInstruction } from "./systemPrompt";
+import { friendlyGeminiErrorMessage } from "./errors";
 import { CHAT_MAX_TOOL_ROUNDS, GEMINI_MODEL } from "@/lib/constants";
 import type { CharacterContext, ChatMessage, ChatStreamEvent } from "@/types/chat";
 
@@ -44,42 +45,45 @@ export async function* orchestrateChat(
   const contents = toGeminiContents(messages);
 
   for (let round = 0; round < CHAT_MAX_TOOL_ROUNDS; round++) {
-    const stream = await ai.models.generateContentStream({
-      model: GEMINI_MODEL,
-      contents,
-      config: { systemInstruction, tools: [{ functionDeclarations: toolDeclarations }] },
-    });
-
-    const pendingCalls: FunctionCall[] = [];
+    // Collect the raw parts (not just `chunk.functionCalls`) so each part's
+    // `thoughtSignature` survives the round trip - newer Gemini models reject
+    // a replayed function call that's missing the signature it was issued with.
+    const callParts: Part[] = [];
     let emittedText = "";
-    let sawFunctionCall = false;
 
-    for await (const chunk of stream) {
-      const calls = chunk.functionCalls;
-      if (calls && calls.length > 0) {
-        sawFunctionCall = true;
-        pendingCalls.push(...calls);
-        continue;
+    try {
+      const stream = await ai.models.generateContentStream({
+        model: GEMINI_MODEL,
+        contents,
+        config: { systemInstruction, tools: [{ functionDeclarations: toolDeclarations }] },
+      });
+
+      for await (const chunk of stream) {
+        const parts = chunk.candidates?.[0]?.content?.parts ?? [];
+        for (const part of parts) {
+          if (part.functionCall) callParts.push(part);
+        }
+        if (chunk.text) {
+          emittedText += chunk.text;
+          yield { type: "token", value: chunk.text };
+        }
       }
-      if (chunk.text) {
-        emittedText += chunk.text;
-        yield { type: "token", value: chunk.text };
-      }
+    } catch (error) {
+      yield { type: "error", message: friendlyGeminiErrorMessage(error) };
+      return;
     }
 
-    if (!sawFunctionCall) {
+    if (callParts.length === 0) {
       if (!emittedText) yield { type: "token", value: FALLBACK_MESSAGE };
       yield { type: "done" };
       return;
     }
 
-    const callParts = pendingCalls.map((call) =>
-      createPartFromFunctionCall(call.name ?? "", call.args ?? {}),
-    );
     contents.push({ role: "model", parts: callParts });
 
     const responseParts = [];
-    for (const call of pendingCalls) {
+    for (const part of callParts) {
+      const call = part.functionCall!;
       const name = call.name ?? "unknown";
       yield { type: "tool_call", name };
       const result = await runFunctionCall(call);
