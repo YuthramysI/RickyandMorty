@@ -1,0 +1,204 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #f4f6f2;
+  --foreground: #12151a;
+  --surface: #ffffff;
+  --surface-muted: #e9edea;
+  --border: #d4d9d0;
+  --accent: #0f9d58;
+  --accent-foreground: #ffffff;
+  --accent-2: #0891b2;
+  --portal: #22c55e;
+  --danger: #dc2626;
+  --focus-ring: #0f9d58;
+  --glow-accent: rgba(15, 157, 88, 0.28);
+  --glow-accent-2: rgba(8, 145, 178, 0.22);
+  --grid-line: rgba(15, 157, 88, 0.07);
+  --scanline-opacity: 0.02;
+  --nebula-opacity: 0.4;
+  --nebula-a: rgba(15, 157, 88, 0.55);
+  --nebula-b: rgba(8, 145, 178, 0.45);
+  --nebula-c: rgba(147, 51, 234, 0.3);
+}
+
+.dark {
+  --background: #060a09;
+  --foreground: #e7fbef;
+  --surface: #0e1512;
+  --surface-muted: #131c18;
+  --border: #1e2f27;
+  --accent: #39ff8f;
+  --accent-foreground: #03130a;
+  --accent-2: #29e0ff;
+  --portal: #39ff8f;
+  --danger: #ff5c6c;
+  --focus-ring: #39ff8f;
+  --glow-accent: rgba(57, 255, 143, 0.35);
+  --glow-accent-2: rgba(41, 224, 255, 0.28);
+  --grid-line: rgba(57, 255, 143, 0.06);
+  --scanline-opacity: 0.035;
+  --nebula-opacity: 0.7;
+  --nebula-a: rgba(57, 255, 143, 0.8);
+  --nebula-b: rgba(41, 224, 255, 0.65);
+  --nebula-c: rgba(180, 90, 255, 0.55);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-2: var(--accent-2);
+  --color-portal: var(--portal);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-orbitron);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  position: relative;
+}
+
+/* Drifting nebula clouds, fixed to the viewport, behind the grid and all content. */
+.nebula-bg {
+  position: fixed;
+  inset: -10%;
+  z-index: -3;
+  pointer-events: none;
+  filter: blur(50px);
+  opacity: var(--nebula-opacity);
+  background:
+    radial-gradient(48% 52% at 16% 18%, var(--nebula-a) 0%, transparent 70%),
+    radial-gradient(42% 48% at 84% 10%, var(--nebula-b) 0%, transparent 70%),
+    radial-gradient(55% 58% at 58% 52%, var(--nebula-a) 0%, transparent 70%),
+    radial-gradient(40% 44% at 8% 82%, var(--nebula-c) 0%, transparent 70%),
+    radial-gradient(45% 48% at 92% 85%, var(--nebula-b) 0%, transparent 70%);
+  animation: nebula-drift 22s ease-in-out infinite alternate;
+}
+
+/* Faint interdimensional grid, fixed to the viewport behind all content. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 90%);
+}
+
+/* Subtle CRT scanline texture layered over the grid. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, var(--scanline-opacity)) 0px,
+    rgba(255, 255, 255, var(--scanline-opacity)) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+* {
+  border-color: var(--border);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+::selection {
+  background: var(--portal);
+  color: #04140a;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--surface-muted);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--accent);
+  border-radius: 999px;
+  border: 2px solid var(--surface-muted);
+}
+
+@keyframes portal-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes nebula-drift {
+  0% {
+    transform: translate(0%, 0%) scale(1) rotate(0deg);
+  }
+  50% {
+    transform: translate(-6%, 5%) scale(1.18) rotate(6deg);
+  }
+  100% {
+    transform: translate(5%, -4%) scale(1) rotate(-4deg);
+  }
+}
+
+@keyframes portal-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
+.animate-portal-spin {
+  animation: portal-spin 14s linear infinite;
+}
+
+.animate-portal-pulse {
+  animation: portal-pulse 2.4s ease-in-out infinite;
+}
+
+.text-glow {
+  text-shadow:
+    0 0 18px var(--glow-accent),
+    0 0 42px var(--glow-accent-2);
+}
+
+.glow-border {
+  box-shadow:
+    0 0 0 1px var(--border),
+    0 0 24px -8px var(--glow-accent);
+}
+
+.glow-border-strong {
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 0 32px -4px var(--glow-accent),
+    0 0 64px -16px var(--glow-accent-2);
+}
