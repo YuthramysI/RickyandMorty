@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { ArrowRight, MessageCircle, Search, Sparkles } from "lucide-react";
-import { LandingShip } from "@/components/home/LandingShip";
+import { getCharactersByIds } from "@/lib/rickandmorty";
+import { CastRow } from "@/components/home/CastRow";
+
+// Rick, Morty, Summer, Mr. Meeseeks, Mr. Poopybutthole, Squanchy - a recognizable
+// cross-section of the cast, shown up front so it's obvious what this site is about.
+const FEATURED_CHARACTER_IDS = [1, 2, 3, 242, 244, 331];
 
 const FEATURES = [
   {
@@ -21,25 +26,28 @@ const FEATURES = [
   },
 ];
 
-export default function Home() {
+export default async function Home() {
+  const featuredCharacters = await getCharactersByIds(FEATURED_CHARACTER_IDS);
+
   return (
     <div className="flex flex-1 flex-col">
       <section className="relative flex flex-col items-center gap-6 px-4 py-24 text-center sm:px-6">
-        <LandingShip className="relative z-10" />
+        {featuredCharacters.length > 0 && <CastRow characters={featuredCharacters} />}
 
         <span className="border-border bg-surface/70 text-accent relative z-10 rounded-full border px-3 py-1 font-mono text-xs tracking-wide backdrop-blur">
-          [ powered by the rick and morty api + gemini function calling ]
+          [ 800+ characters · every episode · gemini function calling ]
         </span>
 
         <h1 className="font-display text-glow relative z-10 max-w-3xl text-4xl leading-tight font-extrabold tracking-tight sm:text-6xl">
-          EXPLORE THE <span className="text-accent">MULTIVERSE</span>.
+          THE RICK AND MORTY <span className="text-accent">WIKI</span>,
           <br />
-          <span className="text-accent-2">ASK IT ANYTHING.</span>
+          <span className="text-accent-2">WITH A BRAIN.</span>
         </h1>
 
         <p className="text-foreground/60 relative z-10 max-w-xl">
-          Browse every character and episode, then chat with an assistant that looks up real,
-          up-to-date data instead of relying on guesswork.
+          A fan-made explorer for the Rick and Morty universe: browse every character and episode
+          across the show, then ask the built-in AI assistant about any of them - it looks up real
+          show data instead of relying on guesswork.
         </p>
 
         <Link
