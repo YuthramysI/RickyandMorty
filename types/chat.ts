@@ -11,11 +11,6 @@ export interface CharacterContext {
   name: string;
 }
 
-export interface ChatRequestBody {
-  messages: Pick<ChatMessage, "role" | "content">[];
-  characterContext?: CharacterContext;
-}
-
 export type ChatStreamEvent =
   | { type: "tool_call"; name: string }
   | { type: "token"; value: string }
