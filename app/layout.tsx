@@ -5,6 +5,7 @@ import { ChatContextProvider } from "@/components/chat/ChatContext";
 import { ChatWidget } from "@/components/chat/ChatWidget";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
+import { PortalSwirl } from "@/components/ui/PortalSwirl";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -52,7 +53,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="flex min-h-full flex-col">
-        <div aria-hidden className="nebula-bg" />
+        <div
+          aria-hidden
+          className="pointer-events-none fixed inset-0 -z-30 flex items-start justify-center overflow-hidden opacity-[var(--nebula-opacity)] blur-2xl"
+        >
+          <PortalSwirl size={900} className="-translate-y-1/4" />
+        </div>
         <ThemeProvider>
           <ChatContextProvider>
             <Navbar />
