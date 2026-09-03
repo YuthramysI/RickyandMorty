@@ -30,12 +30,42 @@ function releaseSlot(): void {
   requestQueue.shift()?.();
 }
 
+const FETCH_TIMEOUT_MS = 8000;
+
+/**
+ * Without a timeout, a single stalled connection to the upstream (dropped
+ * network, slow DNS, etc.) would hang forever - and since `limitedFetch`
+ * never returns, it never releases its concurrency slot either. Enough of
+ * those piling up over time silently exhausts every slot, and every
+ * subsequent lookup queues forever behind them. Aborting after a few
+ * seconds guarantees the slot always frees up, win or lose.
+ */
+async function fetchWithTimeout(url: string, options: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function limitedFetch(url: string, options: RequestInit): Promise<Response> {
   await acquireSlot();
   try {
-    return await fetch(url, options);
+    return await fetchWithTimeout(url, options);
   } finally {
     releaseSlot();
+  }
+}
+
+/** Resolves to `null` (instead of throwing) on a timeout or network error, so
+ * the retry loop below can treat it the same way it treats a bad status code. */
+async function attemptFetch(url: string, options: RequestInit): Promise<Response | null> {
+  try {
+    return await limitedFetch(url, options);
+  } catch {
+    return null;
   }
 }
 
@@ -82,19 +112,23 @@ async function request(
   revalidateSeconds = 3600,
 ): Promise<Response> {
   const url = buildUrl(path, params);
-  let response = await limitedFetch(url, { next: { revalidate: revalidateSeconds } });
+  let response = await attemptFetch(url, { next: { revalidate: revalidateSeconds } });
 
   for (
     let attempt = 0;
-    !response.ok && isRetryableStatus(response.status) && attempt < MAX_ATTEMPTS - 1;
+    (!response || (!response.ok && isRetryableStatus(response.status))) &&
+    attempt < MAX_ATTEMPTS - 1;
     attempt++
   ) {
-    await sleep(retryDelayMs(response, attempt));
+    await sleep(response ? retryDelayMs(response, attempt) : BASE_RETRY_DELAY_MS * 2 ** attempt);
     // Bypass the cache on retries so a transient failure never gets served
     // (or re-cached) as the answer once the upstream has recovered.
-    response = await limitedFetch(url, { cache: "no-store" });
+    response = await attemptFetch(url, { cache: "no-store" });
   }
 
+  if (!response) {
+    throw new RickAndMortyApiError("Rick and Morty API request timed out or failed to connect.");
+  }
   if (!response.ok && response.status !== 404) {
     throw new RickAndMortyApiError(
       `Rick and Morty API request failed: ${response.status} ${response.statusText}`,
