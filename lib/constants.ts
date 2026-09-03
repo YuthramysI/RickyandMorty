@@ -1,7 +1,7 @@
 export const RICK_AND_MORTY_API_BASE =
   process.env.RICKANDMORTY_API_BASE ?? "https://rickandmortyapi.com/api";
 
-export const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash";
+export const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
 
 export const CHARACTERS_PAGE_SIZE = 20;
 
