@@ -1,16 +1,18 @@
 # Rick and Morty Explorer
 
+[![CI](https://github.com/YuthramysI/RickyandMorty/actions/workflows/ci.yml/badge.svg)](https://github.com/YuthramysI/RickyandMorty/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 Browse the Rick and Morty multiverse and chat with an AI assistant that looks up real character and episode data instead of guessing.
 
 **[Live demo](#)** _(add your deployed Vercel URL here)_
 
-![Rick and Morty Explorer screenshot](docs/screenshot.png)
-_(replace `docs/screenshot.png` with a real screenshot or GIF of the app once it's running)_
+![Rick and Morty Explorer demo](docs/demo.gif)
 
 ## Features
 
 - **Character browser** - paginated list of every character, with debounced name search and filters for status, species, and gender.
-- **Character detail pages** - image, status, species, origin, current location, and every episode the character appears in.
+- **Character detail pages** - image, status, species, first appearance, and every episode the character appears in. Origin and current location are enriched with their dimension and type, and the page surfaces other characters last seen at the same location.
 - **AI chat with real function calling** - the standout feature. A floating chat assistant, powered by Gemini, answers questions about characters and episodes by calling live tools (`searchCharacters`, `getCharacter`, `getEpisode`, `getCharactersByIds`) that query the Rick and Morty API in real time, instead of relying purely on the model's training data.
 - **Context-aware chat** - while viewing a character's detail page, the chat automatically knows which character you're looking at, so you can ask "tell me more about this one" without repeating the name.
 - **Streaming responses** - assistant replies stream in token by token, with a "looking things up..." indicator while a tool call is in flight.
@@ -64,6 +66,7 @@ Visit [http://localhost:3000](http://localhost:3000).
 | `pnpm lint`         | Lint the codebase                 |
 | `pnpm format`       | Format the codebase with Prettier |
 | `pnpm format:check` | Check formatting without writing  |
+| `pnpm test`         | Run the unit test suite (Vitest)  |
 
 ## Architecture
 
@@ -80,7 +83,13 @@ If you're on a character's detail page, the client includes that character's id 
 ### Known limitations
 
 - **Rate limiting** is a simple in-memory, per-IP fixed window (`lib/chat/rateLimit.ts`). It's best-effort: state lives in memory, so it doesn't hold up across cold starts or multiple concurrent serverless instances. Fine for a portfolio demo; a production deployment should swap in something like [`@upstash/ratelimit`](https://github.com/upstash/ratelimit) backed by Redis or Vercel KV.
-- No authentication, no server-side persistence, and no automated test suite - out of scope for this iteration.
+- No authentication or server-side persistence - out of scope for this iteration.
+
+## Testing & CI
+
+A focused Vitest suite covers the parts most worth guarding against regressions: the Rick and Morty API client's retry/caching behavior (`lib/rickandmorty/client.test.ts`), chat request validation (`lib/chat/validation.test.ts`), and the rate limiter (`lib/chat/rateLimit.test.ts`). Run it with `pnpm test`.
+
+Every push and pull request to `main` runs lint, a format check, the build, and the test suite via [GitHub Actions](.github/workflows/ci.yml).
 
 ## Deploying to Vercel
 

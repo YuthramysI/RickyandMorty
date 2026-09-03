@@ -6,6 +6,7 @@ import {
   getCharactersByIds,
   getEpisodeByCode,
   getEpisodeById,
+  idFromUrl,
   NotFoundError,
 } from "@/lib/rickandmorty";
 import type { Character, Episode } from "@/types/rickandmorty";
@@ -123,7 +124,7 @@ const getCharactersByIdsArgs = z.object({
 });
 
 function idsFromEpisode(episode: Episode): number[] {
-  return episode.characters.map((url) => Number(url.split("/").pop()));
+  return episode.characters.map(idFromUrl).filter((id): id is number => id !== null);
 }
 
 /** Dispatch map executed by the tool-calling orchestration loop. Each handler
@@ -143,7 +144,9 @@ export const toolHandlers: Record<string, (rawArgs: unknown) => Promise<Record<s
       const { id } = getCharacterArgs.parse(rawArgs);
       try {
         const character = await getCharacterById(id);
-        const episodeIds = character.episode.map((url) => Number(url.split("/").pop()));
+        const episodeIds = character.episode
+          .map(idFromUrl)
+          .filter((id): id is number => id !== null);
         return {
           found: true,
           character: {

@@ -185,3 +185,10 @@ export async function fetchByIds<T>(
   const data = (await response.json()) as T | T[];
   return Array.isArray(data) ? data : [data];
 }
+
+/** Every resource URL from this API ends in its numeric id, e.g. `.../episode/12`. */
+export function idFromUrl(url: string): number | null {
+  if (!url) return null;
+  const id = Number(url.split("/").pop());
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
