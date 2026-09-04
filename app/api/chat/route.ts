@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { checkRateLimit, getClientKey } from "@/lib/chat/rateLimit";
+import { checkClientRateLimit, getClientIdentity } from "@/lib/chat/rateLimit";
 import { chatRequestSchema } from "@/lib/chat/validation";
 import { streamToResponse } from "@/lib/chat/sse";
 import { orchestrateChat } from "@/lib/gemini/orchestrate";
@@ -7,8 +7,7 @@ import { orchestrateChat } from "@/lib/gemini/orchestrate";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const clientKey = getClientKey(request);
-  const rateLimit = checkRateLimit(clientKey);
+  const rateLimit = checkClientRateLimit(getClientIdentity(request));
   if (!rateLimit.allowed) {
     return NextResponse.json(
       { error: "Too many requests. Please slow down." },
