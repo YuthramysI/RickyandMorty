@@ -16,10 +16,17 @@ export function buildContentSecurityPolicy(nonce: string | null): string {
   return [
     "default-src 'self'",
     `script-src ${scriptSrc}`,
-    // Inline styles stay allowed: Next injects critical CSS inline and the
-    // animation library writes element styles directly. Style injection is not
-    // a script-execution vector, so this is a materially smaller exposure.
-    "style-src 'self' 'unsafe-inline'",
+    // Styles split the two vectors rather than allowing both. An injected
+    // `<style>` element is the one worth blocking, and the production build
+    // ships its CSS as a linked stylesheet, so nothing legitimate needs inline
+    // `<style>`. Style *attributes* stay allowed because the animation library
+    // writes transforms and opacity directly onto elements, and a nonce cannot
+    // be attached to an attribute. On a browser too old for these directives
+    // the fallback is `default-src 'self'`: stylesheets still load and only the
+    // animations go flat, which is a safe way to degrade.
+    ...(nonce
+      ? [`style-src-elem 'self' 'nonce-${nonce}'`, "style-src-attr 'unsafe-inline'"]
+      : ["style-src 'self' 'unsafe-inline'"]),
     "img-src 'self' data: https://rickandmortyapi.com",
     "font-src 'self' data:",
     "connect-src 'self'",
