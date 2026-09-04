@@ -47,3 +47,23 @@ export const CHAT_MAX_TOOL_ROUNDS = 5;
 
 export const RATE_LIMIT_MAX_REQUESTS = 10;
 export const RATE_LIMIT_WINDOW_MS = 60_000;
+
+/**
+ * Only a header written by infrastructure the client cannot bypass identifies a
+ * caller; anything the client sends is a claim, not a fact. Vercel overwrites
+ * `x-vercel-forwarded-for` on the way in, so it is trustworthy there. Set this
+ * explicitly when fronting the app with your own proxy; leave it empty and the
+ * limiter falls back to a global ceiling instead of pretending to know who is
+ * calling.
+ */
+export const TRUSTED_CLIENT_IP_HEADER =
+  process.env.TRUSTED_CLIENT_IP_HEADER || (process.env.VERCEL ? "x-vercel-forwarded-for" : "");
+
+// Applies to all requests whose origin could not be established. Self-declared
+// identities can be rotated at will, so a per-claim bucket enforces nothing on
+// its own; this ceiling is what actually bounds unidentified traffic.
+export const RATE_LIMIT_UNTRUSTED_CEILING = 60;
+
+// Hard bound on the limiter's bookkeeping, so a flood of forged identities
+// cannot grow the map without limit between window sweeps.
+export const RATE_LIMIT_MAX_TRACKED_CLIENTS = 5_000;
