@@ -82,7 +82,7 @@ If you're on a character's detail page, the client includes that character's id 
 
 ### Known limitations
 
-- **Rate limiting** is a simple in-memory, per-IP fixed window (`lib/chat/rateLimit.ts`). It's best-effort: state lives in memory, so it doesn't hold up across cold starts or multiple concurrent serverless instances. Fine for a portfolio demo; a production deployment should swap in something like [`@upstash/ratelimit`](https://github.com/upstash/ratelimit) backed by Redis or Vercel KV.
+- **Rate limiting** is a simple in-memory, per-IP fixed window (`lib/chat/rateLimit.ts`). It only holds within a single warm serverless instance - verified in practice on Vercel that truly concurrent requests can land on separate instances, each with its own independent counter, so the effective limit isn't reliably enforced under real concurrency. Since this project runs on Gemini's free tier, the practical impact is availability (the daily quota can exhaust faster), not billing risk. A deployment where that distinction matters (e.g. with billing enabled) should swap in something like [`@upstash/ratelimit`](https://github.com/upstash/ratelimit) backed by Redis, which shares state across instances.
 - **Gemini's free tier is limited**, and each model has its own separate daily quota. The default, `gemini-3.5-flash-lite`, has more free headroom than the full `gemini-3.5-flash` model, but a busy demo day can still exhaust it. The chat surfaces a friendly "hit its usage limit" message instead of a raw error when that happens; enabling billing on the Google Cloud project behind your API key raises the limit substantially if you need it.
 - No authentication or server-side persistence - out of scope for this iteration.
 
