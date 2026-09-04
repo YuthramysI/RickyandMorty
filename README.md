@@ -145,6 +145,7 @@ Three details make this work in practice rather than just in a demo:
 - **Tool rounds are capped** (`CHAT_MAX_TOOL_ROUNDS`) so a confused model cannot loop indefinitely at your expense.
 - **Tool failures become data, not exceptions.** A "character not found" is returned to the model as a structured result so it can rephrase, instead of throwing and killing the stream.
 - **Raw response parts are preserved** across the round trip. Newer Gemini models attach a `thoughtSignature` to function calls and reject the follow-up request if it is missing, so the loop stores the parts it received rather than rebuilding them.
+- **A model being down is not the end of the request.** Free-tier models return 503 in bursts and each has its own daily quota, so opening the stream retries with backoff and can switch to a fallback model - see below.
 
 ### Streaming protocol
 
@@ -184,17 +185,20 @@ A few problems that only show up once something is actually deployed, and what w
 - **Next.js caches unsuccessful responses too.** The upstream API intermittently returns a spurious 404 under load, and `fetch(url, { next: { revalidate: 3600 } })` will happily cache that 404 for an hour - so a character that failed once stayed broken. Retries now bypass the cache with `cache: "no-store"`, and 404 is treated as retryable.
 - **Browser auto-translate crashes React.** Translation rewrites the text nodes React is streaming tokens into, and React then throws `NotFoundError` on `removeChild`, taking the page down. The streaming surface is marked `translate="no"` on a _stable_ container (swapping between an empty state and a populated list defeated the first attempt), backed by a defensive `Node.prototype` guard in [`lib/dom-safety.ts`](lib/dom-safety.ts) and an error boundary that can restart just the widget.
 - **Mobile browsers hide bottom-fixed elements.** The layout viewport extends behind the URL bar and the on-screen keyboard, so a chat button pinned to `bottom: 1rem` can render off-screen until the page is scrolled. [`lib/viewport/store.ts`](lib/viewport/store.ts) measures the real visible area via `visualViewport` and offsets the dock, and the panel shrinks to fit rather than overflowing off the top.
+- **Free-tier models go down, individually and often.** Measured against the live API, the configured model returned 503 `UNAVAILABLE` on three consecutive calls while a sibling model answered normally - so a single hard-coded model means an assistant that is simply broken for hours at a time. [`lib/gemini/modelFallback.ts`](lib/gemini/modelFallback.ts) retries an overloaded model with backoff, skips retries for a spent quota (which will not recover in seconds) and moves to a fallback model, and gives up inside a fixed budget. An overloaded model rejects _before_ the first token is streamed, which is what makes retrying safe: the user can never see a half-answer restart. Once a model has answered it is pinned for the rest of the exchange, because a `thoughtSignature` issued by one model is not valid for another.
+- **A stalled request is worse than a failed one.** An overloaded model sometimes accepts the request and then goes quiet, so each attempt carries an `AbortSignal` deadline and the whole exchange shares one budget. The timer guards only the wait for the response to _start_ and is cleared the moment the stream opens, so a long answer is never truncated.
 - **Blank environment variables are not missing ones.** Hosting dashboards happily store an empty string, which `??` passes through. Defaults use `||` so a blank value falls back too.
 
 ## Testing & CI
 
 A focused Vitest suite covers the parts most worth guarding against regressions rather than chasing a coverage number:
 
-| Suite                                                                | What it pins down                          |
-| -------------------------------------------------------------------- | ------------------------------------------ |
-| [`lib/rickandmorty/client.test.ts`](lib/rickandmorty/client.test.ts) | Retry, backoff, and cache-bypass behaviour |
-| [`lib/chat/validation.test.ts`](lib/chat/validation.test.ts)         | Request schema boundaries                  |
-| [`lib/chat/rateLimit.test.ts`](lib/chat/rateLimit.test.ts)           | Window expiry and per-client isolation     |
+| Suite                                                                  | What it pins down                          |
+| ---------------------------------------------------------------------- | ------------------------------------------ |
+| [`lib/rickandmorty/client.test.ts`](lib/rickandmorty/client.test.ts)   | Retry, backoff, and cache-bypass behaviour |
+| [`lib/chat/validation.test.ts`](lib/chat/validation.test.ts)           | Request schema boundaries                  |
+| [`lib/chat/rateLimit.test.ts`](lib/chat/rateLimit.test.ts)             | Window expiry and per-client isolation     |
+| [`lib/gemini/modelFallback.test.ts`](lib/gemini/modelFallback.test.ts) | Retry, model fallback, and budget policy   |
 
 Run them with `pnpm test`. Every push and pull request to `main` runs lint, a format check, the production build, and the test suite via [GitHub Actions](.github/workflows/ci.yml).
 
@@ -203,7 +207,7 @@ Run them with `pnpm test`. Every push and pull request to `main` runs lint, a fo
 Documented deliberately, because knowing where a design stops holding is part of the design.
 
 - **Rate limiting is per-instance.** The limiter ([`lib/chat/rateLimit.ts`](lib/chat/rateLimit.ts)) keeps its counters in memory, which only holds within a single warm serverless instance. This was verified on Vercel: truly concurrent requests can land on separate instances, each with an independent counter, so the limit is not reliably enforced under real concurrency. On Gemini's free tier the practical impact is availability - the daily quota drains faster - not billing. A deployment where that distinction matters should swap in something like [`@upstash/ratelimit`](https://github.com/upstash/ratelimit) backed by Redis, which shares state across instances.
-- **Gemini's free tier is limited**, and each model has its own daily quota. The default, `gemini-3.5-flash-lite`, has more headroom than the full `gemini-3.5-flash`, but a busy demo day can still exhaust it. The chat shows a friendly "hit its usage limit" message rather than a raw error when that happens.
+- **Gemini's free tier is limited**, and each model has its own daily quota. The default, `gemini-3.5-flash-lite`, has more headroom than the full `gemini-3.5-flash`, but a busy demo day can still exhaust it. The chat falls back to `GEMINI_FALLBACK_MODEL`, which has its own separate allowance, and shows a friendly "hit its usage limit" message rather than a raw error only once both are spent.
 - **No authentication or server-side persistence** - out of scope for this iteration. Chat history lives in component state and is intentionally not persisted.
 
 ## Deploying to Vercel
