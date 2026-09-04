@@ -1,7 +1,9 @@
+// `||` (not `??`) so a blank env var (e.g. left empty in a hosting dashboard)
+// falls back too, not just an unset one.
 export const RICK_AND_MORTY_API_BASE =
-  process.env.RICKANDMORTY_API_BASE ?? "https://rickandmortyapi.com/api";
+  process.env.RICKANDMORTY_API_BASE || "https://rickandmortyapi.com/api";
 
-export const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
+export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
 
 export const CHARACTERS_PAGE_SIZE = 20;
 
