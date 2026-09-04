@@ -1,17 +1,39 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore, type CSSProperties } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { MessageCircle } from "lucide-react";
+import {
+  getServerViewportMetrics,
+  getViewportMetrics,
+  subscribeViewport,
+} from "@/lib/viewport/store";
 import { ChatErrorBoundary } from "./ChatErrorBoundary";
 import { ChatWindow } from "./ChatWindow";
+
+/** Toggle button, the gap above it, and the dock's own bottom offset. */
+const DOCK_CHROME_PX = 108;
 
 export function ChatWidget() {
   const [open, setOpen] = useState(false);
   const [instanceKey, setInstanceKey] = useState(0);
+  const { bottomInset, visibleHeight } = useSyncExternalStore(
+    subscribeViewport,
+    getViewportMetrics,
+    getServerViewportMetrics,
+  );
+
+  const dockStyle = {
+    "--chat-dock-inset": `${bottomInset}px`,
+    // Short screens (and any screen with the keyboard up) can't fit the panel's
+    // natural height, and the overflow lands off the top of the screen.
+    ...(visibleHeight > 0 && {
+      "--chat-panel-max-height": `${Math.max(240, visibleHeight - DOCK_CHROME_PX)}px`,
+    }),
+  } as CSSProperties;
 
   return (
-    <div className="fixed right-4 bottom-4 z-50 flex flex-col items-end gap-3 sm:right-6 sm:bottom-6">
+    <div className="chat-dock flex flex-col items-end gap-3" style={dockStyle}>
       <AnimatePresence>
         {open && (
           <motion.div

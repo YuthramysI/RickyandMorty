@@ -167,3 +167,28 @@ body::after {
     0 0 32px -4px var(--glow-accent),
     0 0 64px -16px var(--glow-accent-2);
 }
+
+/*
+ * The chat dock is pinned to the bottom of the screen, which on mobile is where
+ * the browser parks its own URL bar and the on-screen keyboard. Both variables
+ * are measured from `visualViewport` at runtime (lib/viewport/store.ts) and
+ * default to 0, so desktop keeps the plain fixed positioning.
+ */
+.chat-dock {
+  position: fixed;
+  right: 1rem;
+  bottom: calc(1rem + var(--chat-dock-inset, 0px));
+  z-index: 50;
+}
+
+@media (min-width: 40rem) {
+  .chat-dock {
+    right: 1.5rem;
+    bottom: calc(1.5rem + var(--chat-dock-inset, 0px));
+  }
+}
+
+.chat-panel {
+  height: 32rem;
+  max-height: var(--chat-panel-max-height, 32rem);
+}

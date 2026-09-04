@@ -13,7 +13,7 @@ export function ChatWindow({ onClose }: { onClose: () => void }) {
   });
 
   return (
-    <div className="border-accent/40 bg-surface/95 glow-border-strong flex h-[32rem] w-[22rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border backdrop-blur">
+    <div className="border-accent/40 bg-surface/95 glow-border-strong chat-panel flex w-[22rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border backdrop-blur">
       <div className="border-border from-surface-muted flex items-center justify-between border-b bg-gradient-to-r to-transparent px-4 py-3">
         <div>
           <p className="font-display flex items-center gap-2 text-xs font-bold tracking-[0.15em] uppercase">
