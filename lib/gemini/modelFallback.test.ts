@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GeminiTimeoutError, withModelFallback } from "./modelFallback";
+import { resetModelHealth } from "./modelHealth";
 
 const overloaded = () =>
   new Error('{"error":{"code":503,"message":"high demand","status":"UNAVAILABLE"}}');
@@ -9,6 +10,9 @@ const quotaSpent = () =>
 /** `open` also receives a timeout; these assertions only care which model was tried. */
 const modelsTried = (open: { mock: { calls: unknown[][] } }) =>
   open.mock.calls.map((call) => call[0]);
+
+// Cooldowns deliberately outlive a single request, so each test starts clean.
+beforeEach(() => resetModelHealth());
 
 describe("withModelFallback", () => {
   it("uses the first model when it works and never touches the others", async () => {

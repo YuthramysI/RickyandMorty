@@ -5,6 +5,7 @@ import {
   GEMINI_RETRY_BASE_DELAY_MS,
   GEMINI_TOTAL_BUDGET_MS,
 } from "@/lib/constants";
+import { markModelHealthy, markModelUnavailable, orderByAvailability } from "./modelHealth";
 
 /** Raised when a model accepted the request but never started responding. */
 export class GeminiTimeoutError extends Error {
@@ -57,7 +58,9 @@ export async function withModelFallback<T>(
   budgetMs: number = GEMINI_TOTAL_BUDGET_MS,
 ): Promise<{ value: T; model: string }> {
   const deadline = Date.now() + budgetMs;
-  const rotation = [...models];
+  // Models that refused a recent request go last, so an ongoing outage is not
+  // rediscovered from scratch on every single message.
+  const rotation = orderByAvailability(models);
   let lastError: unknown;
 
   for (let pass = 0; pass < GEMINI_MAX_PASSES && rotation.length > 0; pass++) {
@@ -76,7 +79,9 @@ export async function withModelFallback<T>(
       }
 
       try {
-        return { value: await open(model, timeoutMs), model };
+        const value = await open(model, timeoutMs);
+        markModelHealthy(model);
+        return { value, model };
       } catch (error) {
         // The user only ever sees a friendly summary, so without this the
         // provider's actual reason for refusing is lost and a production
@@ -84,11 +89,11 @@ export async function withModelFallback<T>(
         console.error(`Gemini model "${model}" failed:`, error);
         lastError = error;
 
-        if (isQuotaError(error)) {
-          rotation.splice(rotation.indexOf(model), 1);
-        } else if (!isOverloadedError(error)) {
-          throw error;
-        }
+        const quotaSpent = isQuotaError(error);
+        if (!quotaSpent && !isOverloadedError(error)) throw error;
+
+        markModelUnavailable(model, error, quotaSpent);
+        if (quotaSpent) rotation.splice(rotation.indexOf(model), 1);
       }
     }
   }

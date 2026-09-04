@@ -10,7 +10,7 @@ export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
 // time. Spreading across a few of them is the only reliability lever a free
 // key actually has. Comma-separated so a deployment can retune without a build.
 export const GEMINI_FALLBACK_MODELS = (
-  process.env.GEMINI_FALLBACK_MODELS || "gemini-3.6-flash,gemini-3.5-flash,gemini-3.8-flash"
+  process.env.GEMINI_FALLBACK_MODELS || "gemini-3.8-flash,gemini-3.6-flash,gemini-3.5-flash"
 )
   .split(",")
   .map((model) => model.trim())
@@ -21,10 +21,21 @@ export const GEMINI_FALLBACK_MODELS = (
 export const GEMINI_MAX_PASSES = 2;
 export const GEMINI_RETRY_BASE_DELAY_MS = 600;
 
+// The assistant summarises looked-up facts; it has nothing to deliberate about.
+// Measured on the live API, disabling reasoning cut a one-sentence answer from
+// ~10s to ~1s with identical output. Models that reject it are detected at
+// runtime (lib/gemini/thinkingSupport.ts) rather than hard-coded here.
+export const GEMINI_THINKING_BUDGET = 0;
+
 // An overloaded model sometimes stalls instead of rejecting. Without a cap the
 // user waits on a request that was never going to arrive, so each attempt is cut
 // short and the whole round is bounded - a clear failure beats an endless spinner.
-export const GEMINI_OPEN_TIMEOUT_MS = 15_000;
+export const GEMINI_OPEN_TIMEOUT_MS = 10_000;
+
+// How long a model that just refused is treated as the least promising choice.
+// A spike passes in seconds; a spent quota does not, so it waits longer.
+export const GEMINI_OVERLOADED_COOLDOWN_MS = 30_000;
+export const GEMINI_QUOTA_COOLDOWN_MS = 300_000;
 export const GEMINI_TOTAL_BUDGET_MS = 60_000;
 export const GEMINI_MIN_OPEN_TIMEOUT_MS = 3_000;
 

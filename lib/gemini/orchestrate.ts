@@ -13,9 +13,15 @@ import { buildSystemInstruction } from "./systemPrompt";
 import { friendlyGeminiErrorMessage } from "./errors";
 import { GeminiTimeoutError, withModelFallback } from "./modelFallback";
 import {
+  allowsDisabledThinking,
+  isInvalidArgumentError,
+  rememberRequiresThinking,
+} from "./thinkingSupport";
+import {
   CHAT_MAX_TOOL_ROUNDS,
   GEMINI_FALLBACK_MODELS,
   GEMINI_MODEL,
+  GEMINI_THINKING_BUDGET,
   GEMINI_TOTAL_BUDGET_MS,
 } from "@/lib/constants";
 import type { CharacterContext, ChatMessage, ChatStreamEvent } from "@/types/chat";
@@ -56,24 +62,40 @@ async function openStream(
   systemInstruction: string,
   timeoutMs: number,
 ): Promise<ContentStream> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const attempt = async (disableThinking: boolean) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
+    try {
+      return await ai.models.generateContentStream({
+        model,
+        contents,
+        config: {
+          systemInstruction,
+          tools: [{ functionDeclarations: toolDeclarations }],
+          abortSignal: controller.signal,
+          ...(disableThinking && { thinkingConfig: { thinkingBudget: GEMINI_THINKING_BUDGET } }),
+        },
+      });
+    } catch (error) {
+      if (controller.signal.aborted) throw new GeminiTimeoutError(model, timeoutMs);
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  const disableThinking = allowsDisabledThinking(model);
   try {
-    return await ai.models.generateContentStream({
-      model,
-      contents,
-      config: {
-        systemInstruction,
-        tools: [{ functionDeclarations: toolDeclarations }],
-        abortSignal: controller.signal,
-      },
-    });
+    return await attempt(disableThinking);
   } catch (error) {
-    if (controller.signal.aborted) throw new GeminiTimeoutError(model, timeoutMs);
+    // This model won't take a disabled thinking budget. Note it so later
+    // requests skip straight to a shape it accepts, and go again now.
+    if (disableThinking && isInvalidArgumentError(error)) {
+      rememberRequiresThinking(model);
+      return attempt(false);
+    }
     throw error;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
