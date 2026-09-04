@@ -1,21 +1,7 @@
 import type { NextConfig } from "next";
 
-// `unsafe-eval` is only added in development: React's dev mode uses eval() to
-// reconstruct stack traces for its debugging tools (never in production), and
-// without it the browser just logs noisy warnings - no need to weaken the
-// policy that actually ships to real visitors to silence a local-only one.
-const CONTENT_SECURITY_POLICY = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: https://rickandmortyapi.com",
-  "font-src 'self' data:",
-  "connect-src 'self'",
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-].join("; ");
-
+// The Content-Security-Policy is not set here: it carries a per-request nonce,
+// which a static config cannot produce. It is built in `proxy.ts` instead.
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
@@ -40,7 +26,6 @@ const nextConfig: NextConfig = {
             value: "max-age=63072000; includeSubDomains; preload",
           },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
-          { key: "Content-Security-Policy", value: CONTENT_SECURITY_POLICY },
         ],
       },
     ];

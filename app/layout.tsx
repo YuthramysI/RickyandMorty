@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Geist, Geist_Mono, Orbitron } from "next/font/google";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { ChatContextProvider } from "@/components/chat/ChatContext";
@@ -7,6 +8,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { PortalSwirl } from "@/components/ui/PortalSwirl";
 import { DomSafetyPatch } from "@/components/DomSafetyPatch";
+import { NONCE_HEADER } from "@/lib/security/csp";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -43,7 +45,14 @@ const THEME_INIT_SCRIPT = `
 })();
 `;
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // The theme script has to run inline before first paint to avoid a flash of
+  // the wrong theme, so it needs the request's nonce to satisfy the CSP.
+  // Reading it opts every route into dynamic rendering, which is inherent to
+  // nonce-based CSP: a nonce baked in at build time would be the same for
+  // everyone and would defend against nothing.
+  const nonce = (await headers()).get(NONCE_HEADER) ?? undefined;
+
   return (
     <html
       lang="en"
@@ -51,7 +60,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
     >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="flex min-h-full flex-col">
         <DomSafetyPatch />
