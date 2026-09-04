@@ -38,7 +38,7 @@ export function CharacterCard({ character, index }: { character: Character; inde
         </div>
         <div className="flex flex-1 flex-col gap-1.5 p-4">
           <h2 className="font-display group-hover:text-accent truncate text-sm font-bold tracking-wide uppercase transition-colors">
-            {character.name}
+            <span translate="no">{character.name}</span>
           </h2>
           <StatusBadge status={character.status} species={character.species} />
         </div>

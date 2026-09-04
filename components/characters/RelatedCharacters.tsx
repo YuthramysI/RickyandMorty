@@ -32,7 +32,7 @@ export function RelatedCharacters({
               />
             </span>
             <span className="group-hover:text-accent text-sm font-medium transition-colors">
-              {character.name}
+              <span translate="no">{character.name}</span>
             </span>
           </Link>
         ))}

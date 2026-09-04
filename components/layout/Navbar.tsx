@@ -17,7 +17,7 @@ export function Navbar() {
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
         <Link href="/" className="font-display flex items-center gap-2.5 text-base tracking-wide">
           <PortalRing size={26} />
-          <span className="text-glow text-foreground">
+          <span className="text-glow text-foreground" translate="no">
             RICK<span className="text-accent">&</span>MORTY
           </span>
         </Link>

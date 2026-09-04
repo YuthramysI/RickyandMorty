@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   getCharacterById,
   getCharacters,
+  getAllEpisodes,
   getCharactersByIds,
   getEpisodeByCode,
   getEpisodeById,
@@ -12,6 +13,12 @@ import {
 import type { Character, Episode } from "@/types/rickandmorty";
 
 const MAX_SEARCH_RESULTS = 8;
+
+/** Episode codes look like "S03E07"; the season is the part the API never exposes directly. */
+function seasonFromCode(code: string): number | null {
+  const match = code.match(/^S(\d+)E\d+$/i);
+  return match ? Number(match[1]) : null;
+}
 
 function summarizeCharacter(character: Character) {
   return {
@@ -86,6 +93,20 @@ export const toolDeclarations: FunctionDeclaration[] = [
     },
   },
   {
+    name: "listEpisodes",
+    description:
+      "Overview of the whole series: how many episodes exist in total and how many per season. Pass a season number to also get that season's episode list. Use this for counting or 'what episodes are in season N' questions, which the single-episode lookup cannot answer.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        season: {
+          type: Type.INTEGER,
+          description: "Optional season number; omit for a series-wide summary.",
+        },
+      },
+    },
+  },
+  {
     name: "getCharactersByIds",
     description:
       "Batch-fetch several characters at once by their numeric ids, e.g. to resolve every character appearing in an episode.",
@@ -118,6 +139,10 @@ const getEpisodeArgs = z
   .refine((args) => args.id !== undefined || args.code !== undefined, {
     message: "Either id or code must be provided.",
   });
+
+const listEpisodesArgs = z.object({
+  season: z.number().int().positive().optional(),
+});
 
 const getCharactersByIdsArgs = z.object({
   ids: z.array(z.number().int().positive()).min(1).max(20),
@@ -180,6 +205,40 @@ export const toolHandlers: Record<string, (rawArgs: unknown) => Promise<Record<s
         }
         throw error;
       }
+    },
+
+    async listEpisodes(rawArgs) {
+      const { season } = listEpisodesArgs.parse(rawArgs ?? {});
+      const episodes = await getAllEpisodes();
+
+      const perSeason = new Map<number, Episode[]>();
+      for (const episode of episodes) {
+        const number = seasonFromCode(episode.episode);
+        if (number === null) continue;
+        perSeason.set(number, [...(perSeason.get(number) ?? []), episode]);
+      }
+
+      const seasons = [...perSeason.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([number, list]) => ({ season: number, episodeCount: list.length }));
+
+      // The full list of every episode would dominate the model's context, so
+      // it is only included when a specific season was asked for.
+      if (season === undefined) {
+        return { totalEpisodes: episodes.length, seasons };
+      }
+
+      const requested = perSeason.get(season);
+      if (!requested) {
+        return { found: false, error: `No season ${season} exists.`, seasons };
+      }
+
+      return {
+        found: true,
+        totalEpisodes: episodes.length,
+        season,
+        episodes: requested.map(summarizeEpisode),
+      };
     },
 
     async getCharactersByIds(rawArgs) {

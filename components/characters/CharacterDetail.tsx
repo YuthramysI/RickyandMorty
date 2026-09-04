@@ -45,7 +45,11 @@ export function CharacterDetail({
 
       <div className="flex flex-col gap-4">
         <div>
-          <h1 className="font-display text-glow text-2xl font-extrabold tracking-wide uppercase">
+          {/* Auto-translate turns proper nouns into nonsense ("Summer" -> "Verano"). */}
+          <h1
+            className="font-display text-glow text-2xl font-extrabold tracking-wide uppercase"
+            translate="no"
+          >
             {character.name}
           </h1>
           <StatusBadge status={character.status} species={character.species} />

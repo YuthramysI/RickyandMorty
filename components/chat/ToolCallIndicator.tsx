@@ -4,6 +4,7 @@ const TOOL_LABELS: Record<string, string> = {
   searchCharacters: "Searching characters...",
   getCharacter: "Looking up character details...",
   getEpisode: "Looking up episode details...",
+  listEpisodes: "Counting up the episode list...",
   getCharactersByIds: "Gathering character details...",
 };
 
