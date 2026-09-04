@@ -7,7 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  build:
+  unit:
+    name: Lint, build & unit tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,3 +27,35 @@ jobs:
       - run: pnpm format:check
       - run: pnpm build
       - run: pnpm test
+
+  # Separate job rather than extra steps on `unit`: it needs a browser download
+  # and its own production build, so running it alongside keeps the fast
+  # feedback fast instead of queueing it behind lint.
+  e2e:
+    name: End-to-end & accessibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      # playwright.config.ts builds and starts the production server itself.
+      - run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
