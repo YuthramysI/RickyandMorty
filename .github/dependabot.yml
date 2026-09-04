@@ -1,0 +1,25 @@
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # Patch and minor bumps are the routine noise CI can vet on its own, so
+      # they arrive as one reviewable PR instead of a dozen.
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      # Majors are deliberately left ungrouped: a framework major carries
+      # migrations that deserve to be reviewed one at a time.
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore(ci)"
