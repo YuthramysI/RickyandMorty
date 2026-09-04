@@ -23,7 +23,7 @@ It is a small app, but every part of it is built the way a production feature wo
 | **Streaming**             | Hand-rolled NDJSON streaming over POST, consumed incrementally in the browser. [`lib/chat/sse.ts`](lib/chat/sse.ts), [`hooks/useChat.ts`](hooks/useChat.ts) |
 | **Resilient networking**  | Retries with exponential backoff, a total time budget, and a concurrency limiter. [`lib/rickandmorty/client.ts`](lib/rickandmorty/client.ts)                |
 | **Secret handling**       | The API key is read only inside a Route Handler and never crosses to the client. [Details below](#keeping-the-api-key-server-only)                          |
-| **Defensive server code** | Zod-validated input, per-IP rate limiting, capped tool rounds, and a strict CSP. [Details below](#security)                                                 |
+| **Defensive server code** | Zod-validated input, spoof-resistant rate limiting, capped tool rounds, nonce-based CSP. [Details below](#security)                                         |
 | **Real-world edge cases** | Cached upstream 404s, browser auto-translate crashes, mobile viewport insets. [Details below](#engineering-notes)                                           |
 | **Tests + CI**            | Vitest suite on the logic that actually breaks, gated on every push. [Details below](#testing--ci)                                                          |
 
@@ -31,7 +31,7 @@ It is a small app, but every part of it is built the way a production feature wo
 
 - **Character browser** - paginated list of every character, with debounced name search and filters for status, species, and gender. Filters live in the URL, so any view is shareable and the back button works.
 - **Character detail pages** - image, status, species, first appearance, and every episode the character appears in. Origin and current location are enriched with their dimension and type, and the page surfaces other characters last seen at the same location.
-- **AI chat with real function calling** - the standout feature. A floating assistant, powered by Gemini, answers questions by calling live tools (`searchCharacters`, `getCharacter`, `getEpisode`, `getCharactersByIds`) that query the Rick and Morty API in real time, instead of relying on the model's training data.
+- **AI chat with real function calling** - the standout feature. A floating assistant, powered by Gemini, answers questions by calling live tools (`searchCharacters`, `getCharacter`, `getEpisode`, `listEpisodes`, `getCharactersByIds`) that query the Rick and Morty API in real time, instead of relying on the model's training data.
 - **Context-aware chat** - while viewing a character's detail page, the chat already knows which character you're looking at, so "tell me more about this one" works without repeating the name.
 - **Streaming responses** - replies stream in token by token, with a "looking things up..." indicator while a tool call is in flight.
 - **Light/dark mode**, a mobile-first responsive layout, and animated micro-interactions throughout.
@@ -91,6 +91,7 @@ Visit [http://localhost:3000](http://localhost:3000).
 | `pnpm format`       | Format the codebase with Prettier |
 | `pnpm format:check` | Check formatting without writing  |
 | `pnpm test`         | Run the unit test suite (Vitest)  |
+| `pnpm test:e2e`     | Run the Playwright smoke test     |
 
 ## Project structure
 
@@ -106,7 +107,10 @@ lib/
   rickandmorty/            Typed API client - retries, caching, concurrency limit
   gemini/                  Tool declarations, orchestration loop, system prompt
   chat/                    Zod schemas, rate limiter, NDJSON stream helper
+  security/                Content-Security-Policy construction
   theme/  viewport/        useSyncExternalStore-backed browser state
+proxy.ts                   Per-request CSP nonce
+e2e/                       Playwright smoke test
 types/                     Shared domain and chat-protocol types
 ```
 
@@ -166,17 +170,27 @@ If you are on a character's detail page, the client sends that character's id. T
 
 ## Security
 
-| Concern                  | How it is handled                                                                                |
-| ------------------------ | ------------------------------------------------------------------------------------------------ |
-| Secret exposure          | Key is server-only; no `NEXT_PUBLIC_*`, no tokens in `localStorage` or cookies                   |
-| Untrusted input          | Every request body is parsed with a Zod schema; message count and length are capped              |
-| Abuse / cost             | Per-IP fixed-window rate limit with a `Retry-After` response, plus a hard cap on tool rounds     |
-| Privilege                | There is no auth and no user data - the app has no privileged state a client could reach for     |
-| Injection & clickjacking | Strict CSP (`default-src 'self'`, `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `nosniff`  |
-| Transport                | HSTS with `preload`, `Cross-Origin-Opener-Policy: same-origin`, restrictive `Permissions-Policy` |
-| Error leakage            | Provider errors are mapped to friendly messages instead of surfacing raw API JSON to users       |
+| Concern                  | How it is handled                                                                                               |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| Secret exposure          | Key is server-only; no `NEXT_PUBLIC_*`, no tokens in `localStorage` or cookies                                  |
+| Untrusted input          | Every request body is parsed with a Zod schema; message count and length are capped                             |
+| Abuse / cost             | Per-client fixed-window rate limit with a `Retry-After` response, plus a hard cap on tool rounds                |
+| Privilege                | There is no auth and no user data - the app has no privileged state a client could reach for                    |
+| Injection & clickjacking | Nonce-based CSP with no `'unsafe-inline'` scripts, `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `nosniff` |
+| Transport                | HSTS with `preload`, `Cross-Origin-Opener-Policy: same-origin`, restrictive `Permissions-Policy`                |
+| Error leakage            | Provider errors are mapped to friendly messages instead of surfacing raw API JSON to users                      |
 
-`'unsafe-eval'` is added to the CSP **only** in development, where React's dev build uses `eval()` for stack traces. The policy that ships to real visitors does not include it. See [`next.config.ts`](next.config.ts).
+### Content-Security-Policy
+
+`'unsafe-inline'` in `script-src` lets any injected `<script>` execute, which is precisely the payload an XSS delivers - so the production policy does not contain it. [`proxy.ts`](proxy.ts) mints a nonce per request and puts the resulting policy on both the request (which is how Next stamps the nonce onto its own script tags) and the response (which is what the browser enforces). Development keeps the permissive policy: the dev server injects its own inline scripts and React's dev build needs `eval()`, and a nonce cannot simply be added on top, because browsers ignore `'unsafe-inline'` as soon as a nonce is present.
+
+This is why every route renders dynamically. A nonce baked in at build time would be identical for every visitor and would defend against nothing, so nonce-based CSP and static prerendering are mutually exclusive. Inline **styles** remain allowed: Next inlines critical CSS and the animation library writes element styles directly, and style injection is not a script-execution vector.
+
+### Identifying clients for rate limiting
+
+`x-forwarded-for` is a client-supplied header. With no proxy in front of the app it is attacker-controlled, so keying the limiter on it meant an attacker could rotate the value and reset their counter at will. [`lib/chat/rateLimit.ts`](lib/chat/rateLimit.ts) instead reads `TRUSTED_CLIENT_IP_HEADER` - defaulting to `x-vercel-forwarded-for`, which Vercel overwrites on the way in and the client therefore cannot forge.
+
+**Deployment assumption:** the app expects to sit behind a proxy that sets that header. Without one it cannot identify callers, and rather than pretending otherwise it applies two tiers: each claimed address still gets its own bucket, so one caller cannot lock everybody else out, and a ceiling on all unidentified traffic bounds what rotating the header can achieve. Set `TRUSTED_CLIENT_IP_HEADER` to your own proxy's header to restore true per-client limits.
 
 ## Engineering notes
 
@@ -195,20 +209,37 @@ A few problems that only show up once something is actually deployed, and what w
 
 A focused Vitest suite covers the parts most worth guarding against regressions rather than chasing a coverage number:
 
-| Suite                                                                  | What it pins down                          |
-| ---------------------------------------------------------------------- | ------------------------------------------ |
-| [`lib/rickandmorty/client.test.ts`](lib/rickandmorty/client.test.ts)   | Retry, backoff, and cache-bypass behaviour |
-| [`lib/chat/validation.test.ts`](lib/chat/validation.test.ts)           | Request schema boundaries                  |
-| [`lib/chat/rateLimit.test.ts`](lib/chat/rateLimit.test.ts)             | Window expiry and per-client isolation     |
-| [`lib/gemini/modelFallback.test.ts`](lib/gemini/modelFallback.test.ts) | Retry, model fallback, and budget policy   |
+| Suite                                                                  | What it pins down                                                    |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| [`lib/rickandmorty/client.test.ts`](lib/rickandmorty/client.test.ts)   | Retry, backoff, and cache-bypass behaviour                           |
+| [`lib/chat/validation.test.ts`](lib/chat/validation.test.ts)           | Request schema boundaries                                            |
+| [`lib/chat/rateLimit.test.ts`](lib/chat/rateLimit.test.ts)             | Client identity, spoofed headers, window expiry, bounded bookkeeping |
+| [`lib/gemini/orchestrate.test.ts`](lib/gemini/orchestrate.test.ts)     | The tool-calling loop against a mocked model                         |
+| [`app/api/chat/route.test.ts`](app/api/chat/route.test.ts)             | Endpoint contract: 400, 429, 503, and the streaming 200              |
+| [`lib/gemini/modelFallback.test.ts`](lib/gemini/modelFallback.test.ts) | Retry, model fallback, and budget policy                             |
 
 Run them with `pnpm test`. Every push and pull request to `main` runs lint, a format check, the production build, and the test suite via [GitHub Actions](.github/workflows/ci.yml).
+
+### End-to-end smoke test
+
+[`e2e/chat.spec.ts`](e2e/chat.spec.ts) drives a real browser against the production build: it sends a chat message and asserts that a partial answer is on screen before the complete one, that the tool-call indicator appears while a lookup is in flight, and that a server error surfaces without taking the widget down. Run it with `pnpm test:e2e`.
+
+The chat endpoint is stubbed by replacing `fetch`, not by intercepting the network. Two reasons: the assistant runs on Gemini's free tier, whose per-model daily allowance a test suite would drain in a handful of runs; and Playwright's route fulfilment delivers a response body in one piece, which would collapse the exchange into a single tick and make the streaming behaviour - the whole point of the test - impossible to observe. Everything downstream of `fetch` is production code, including the nonce-based CSP, since the suite runs `pnpm build && pnpm start` rather than the dev server.
+
+It is deliberately not in CI: it needs a browser download and a full production build, which is a poor trade for a job that runs on every push. To add it, append this step to [the workflow](.github/workflows/ci.yml) after the existing test step:
+
+```yaml
+- name: Install Playwright browser
+  run: pnpm exec playwright install --with-deps chromium
+- name: End-to-end smoke test
+  run: pnpm test:e2e
+```
 
 ## Known limitations
 
 Documented deliberately, because knowing where a design stops holding is part of the design.
 
-- **Rate limiting is per-instance.** The limiter ([`lib/chat/rateLimit.ts`](lib/chat/rateLimit.ts)) keeps its counters in memory, which only holds within a single warm serverless instance. This was verified on Vercel: truly concurrent requests can land on separate instances, each with an independent counter, so the limit is not reliably enforced under real concurrency. On Gemini's free tier the practical impact is availability - the daily quota drains faster - not billing. A deployment where that distinction matters should swap in something like [`@upstash/ratelimit`](https://github.com/upstash/ratelimit) backed by Redis, which shares state across instances.
+- **Rate limiting is per-instance.** The limiter ([`lib/chat/rateLimit.ts`](lib/chat/rateLimit.ts)) keeps its counters in memory, which only holds within a single warm serverless instance, and depends on a trusted proxy header for identity ([above](#identifying-clients-for-rate-limiting)). This was verified on Vercel: truly concurrent requests can land on separate instances, each with an independent counter, so the limit is not reliably enforced under real concurrency. On Gemini's free tier the practical impact is availability - the daily quota drains faster - not billing. A deployment where that distinction matters should swap in something like [`@upstash/ratelimit`](https://github.com/upstash/ratelimit) backed by Redis, which shares state across instances.
 - **Gemini's free tier allows 20 requests per day, per model** (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`), and a single question costs more than one request because each tool round trip is its own call - so roughly ten questions per model per day. Working through `GEMINI_FALLBACK_MODELS` multiplies that by the number of candidates and is the only headroom a free key has; the chat shows a friendly "hit its usage limit" message rather than a raw error once every candidate is spent. A deployment that needs dependable uptime should enable billing on the Google Cloud project behind the key, which removes the per-day cap.
 - **No authentication or server-side persistence** - out of scope for this iteration. Chat history lives in component state and is intentionally not persisted.
 
