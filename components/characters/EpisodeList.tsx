@@ -19,7 +19,7 @@ export function EpisodeList({ episodes }: { episodes: Episode[] }) {
               <p className="text-sm font-medium" translate="no">
                 {episode.name}
               </p>
-              <p className="text-foreground/50 font-mono text-xs">{episode.air_date}</p>
+              <p className="text-foreground/70 font-mono text-xs">{episode.air_date}</p>
             </div>
             <span className="bg-surface-muted text-accent group-hover:bg-accent group-hover:text-accent-foreground rounded-full px-2 py-1 font-mono text-xs font-medium transition-colors">
               {episode.episode}

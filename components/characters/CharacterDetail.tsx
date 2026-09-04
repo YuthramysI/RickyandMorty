@@ -13,7 +13,7 @@ function InfoRow({ label, value, sub }: { label: string; value: string; sub?: st
     <div className="border-border bg-surface/60 flex flex-col gap-1 rounded-lg border p-3">
       <dt className="text-accent font-mono text-[0.65rem] tracking-[0.15em] uppercase">{label}</dt>
       <dd className="text-sm font-medium">{value}</dd>
-      {sub && <dd className="text-foreground/50 text-xs">{sub}</dd>}
+      {sub && <dd className="text-foreground/70 text-xs">{sub}</dd>}
     </div>
   );
 }

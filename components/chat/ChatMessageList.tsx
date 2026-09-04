@@ -32,7 +32,7 @@ export function ChatMessageList({ messages, pendingToolCall }: ChatMessageListPr
       translate="no"
     >
       {isEmpty ? (
-        <div className="text-foreground/50 flex flex-col items-center gap-2 text-sm">
+        <div className="text-foreground/70 flex flex-col items-center gap-2 text-sm">
           <span className="text-accent font-mono text-xs tracking-widest uppercase">
             [ signal open ]
           </span>

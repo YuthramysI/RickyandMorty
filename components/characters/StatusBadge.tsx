@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils/cn";
 const STATUS_STYLES: Record<CharacterStatus, string> = {
   Alive: "text-accent",
   Dead: "text-danger",
-  unknown: "text-foreground/50",
+  unknown: "text-foreground/70",
 };
 
 const STATUS_DOT: Record<CharacterStatus, string> = {
