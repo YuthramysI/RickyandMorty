@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { MessageCircle } from "lucide-react";
+import { ChatErrorBoundary } from "./ChatErrorBoundary";
 import { ChatWindow } from "./ChatWindow";
 
 export function ChatWidget() {
   const [open, setOpen] = useState(false);
+  const [instanceKey, setInstanceKey] = useState(0);
 
   return (
     <div className="fixed right-4 bottom-4 z-50 flex flex-col items-end gap-3 sm:right-6 sm:bottom-6">
@@ -18,7 +20,9 @@ export function ChatWidget() {
             exit={{ opacity: 0, y: 16, scale: 0.96 }}
             transition={{ duration: 0.18 }}
           >
-            <ChatWindow onClose={() => setOpen(false)} />
+            <ChatErrorBoundary onReset={() => setInstanceKey((current) => current + 1)}>
+              <ChatWindow key={instanceKey} onClose={() => setOpen(false)} />
+            </ChatErrorBoundary>
           </motion.div>
         )}
       </AnimatePresence>

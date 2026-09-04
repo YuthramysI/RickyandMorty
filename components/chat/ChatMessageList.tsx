@@ -31,9 +31,10 @@ export function ChatMessageList({ messages, pendingToolCall }: ChatMessageListPr
 
   return (
     <div
-      className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4"
+      className="notranslate flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4"
       role="log"
       aria-live="polite"
+      translate="no"
     >
       {messages.map((message) => (
         <ChatMessage key={message.id} message={message} />

@@ -2,7 +2,7 @@ import { RICK_AND_MORTY_API_BASE } from "@/lib/constants";
 import { NotFoundError, RickAndMortyApiError } from "./errors";
 import type { ApiCollection } from "@/types/rickandmorty";
 
-const MAX_ATTEMPTS = 4;
+const MAX_ATTEMPTS = 3;
 const BASE_RETRY_DELAY_MS = 300;
 const MAX_CONCURRENT_REQUESTS = 6;
 
@@ -30,19 +30,24 @@ function releaseSlot(): void {
   requestQueue.shift()?.();
 }
 
-const FETCH_TIMEOUT_MS = 8000;
-
 /**
- * Without a timeout, a single stalled connection to the upstream (dropped
- * network, slow DNS, etc.) would hang forever - and since `limitedFetch`
- * never returns, it never releases its concurrency slot either. Enough of
- * those piling up over time silently exhausts every slot, and every
- * subsequent lookup queues forever behind them. Aborting after a few
- * seconds guarantees the slot always frees up, win or lose.
+ * The whole retry sequence for one logical request (all attempts and backoff
+ * delays combined) is capped at this budget. Serverless hosts (Vercel's
+ * default included) kill a function after a fixed wall-clock limit - stacking
+ * several multi-second timeouts and backoffs on top of each other could
+ * previously exceed that limit and get the whole request killed with a 503
+ * before our own retry/error handling ever got a chance to run.
  */
-async function fetchWithTimeout(url: string, options: RequestInit): Promise<Response> {
+const REQUEST_BUDGET_MS = 8000;
+const MIN_FETCH_TIMEOUT_MS = 2000;
+
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } finally {
@@ -50,10 +55,14 @@ async function fetchWithTimeout(url: string, options: RequestInit): Promise<Resp
   }
 }
 
-async function limitedFetch(url: string, options: RequestInit): Promise<Response> {
+async function limitedFetch(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
   await acquireSlot();
   try {
-    return await fetchWithTimeout(url, options);
+    return await fetchWithTimeout(url, options, timeoutMs);
   } finally {
     releaseSlot();
   }
@@ -61,9 +70,13 @@ async function limitedFetch(url: string, options: RequestInit): Promise<Response
 
 /** Resolves to `null` (instead of throwing) on a timeout or network error, so
  * the retry loop below can treat it the same way it treats a bad status code. */
-async function attemptFetch(url: string, options: RequestInit): Promise<Response | null> {
+async function attemptFetch(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number,
+): Promise<Response | null> {
   try {
-    return await limitedFetch(url, options);
+    return await limitedFetch(url, options, timeoutMs);
   } catch {
     return null;
   }
@@ -112,7 +125,13 @@ async function request(
   revalidateSeconds = 3600,
 ): Promise<Response> {
   const url = buildUrl(path, params);
-  let response = await attemptFetch(url, { next: { revalidate: revalidateSeconds } });
+  const deadline = Date.now() + REQUEST_BUDGET_MS;
+
+  let response = await attemptFetch(
+    url,
+    { next: { revalidate: revalidateSeconds } },
+    REQUEST_BUDGET_MS,
+  );
 
   for (
     let attempt = 0;
@@ -120,10 +139,16 @@ async function request(
     attempt < MAX_ATTEMPTS - 1;
     attempt++
   ) {
-    await sleep(response ? retryDelayMs(response, attempt) : BASE_RETRY_DELAY_MS * 2 ** attempt);
+    const delay = response ? retryDelayMs(response, attempt) : BASE_RETRY_DELAY_MS * 2 ** attempt;
+    const remainingBeforeSleep = deadline - Date.now();
+    if (remainingBeforeSleep <= 0) break;
+    await sleep(Math.min(delay, remainingBeforeSleep));
+
+    const remainingForFetch = deadline - Date.now();
+    if (remainingForFetch < MIN_FETCH_TIMEOUT_MS) break;
     // Bypass the cache on retries so a transient failure never gets served
     // (or re-cached) as the answer once the upstream has recovered.
-    response = await attemptFetch(url, { cache: "no-store" });
+    response = await attemptFetch(url, { cache: "no-store" }, remainingForFetch);
   }
 
   if (!response) {
