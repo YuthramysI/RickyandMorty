@@ -40,8 +40,7 @@ export class ChatErrorBoundary extends Component<Props, State> {
         <div className="border-accent/40 bg-surface glow-border-strong flex h-[32rem] w-[22rem] max-w-[calc(100vw-2rem)] flex-col items-center justify-center gap-3 rounded-2xl border p-6 text-center">
           <p className="font-display text-sm font-bold tracking-wide uppercase">Signal lost</p>
           <p className="text-foreground/60 text-sm">
-            The chat hit an unexpected error. Your browser&apos;s auto-translate feature is a common
-            cause - try turning it off for this page.
+            The chat hit an unexpected error. Restarting it should pick up right where you left off.
           </p>
           <button
             type="button"

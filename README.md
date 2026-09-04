@@ -5,7 +5,7 @@
 
 Browse the Rick and Morty multiverse and chat with an AI assistant that looks up real character and episode data instead of guessing.
 
-**[Live demo](#)** _((https://rickyandmorty-rust.vercel.app/))_
+**[Live demo →](https://rickyandmorty-rust.vercel.app/)**
 
 ![Rick and Morty Explorer demo](docs/demo.gif)
 
