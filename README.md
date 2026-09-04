@@ -38,16 +38,16 @@ It is a small app, but every part of it is built the way a production feature wo
 
 ## Tech stack
 
-|            |                                                                                          |
-| ---------- | ---------------------------------------------------------------------------------------- |
-| Framework  | [Next.js 16](https://nextjs.org/) (App Router, React Server Components)                  |
-| Language   | TypeScript (strict)                                                                      |
-| Styling    | [Tailwind CSS v4](https://tailwindcss.com/) (CSS-first config)                           |
-| Animation  | [Framer Motion](https://motion.dev/)                                                     |
-| AI         | [`@google/genai`](https://www.npmjs.com/package/@google/genai) - Gemini function calling |
-| Validation | [Zod](https://zod.dev/)                                                                  |
-| Testing    | [Vitest](https://vitest.dev/) + GitHub Actions                                           |
-| Data       | [Rick and Morty API](https://rickandmortyapi.com/)                                       |
+|            |                                                                                                 |
+| ---------- | ----------------------------------------------------------------------------------------------- |
+| Framework  | [Next.js 16](https://nextjs.org/) (App Router, React Server Components)                         |
+| Language   | TypeScript (strict)                                                                             |
+| Styling    | [Tailwind CSS v4](https://tailwindcss.com/) (CSS-first config)                                  |
+| Animation  | [Framer Motion](https://motion.dev/)                                                            |
+| AI         | [`@google/genai`](https://www.npmjs.com/package/@google/genai) - Gemini function calling        |
+| Validation | [Zod](https://zod.dev/)                                                                         |
+| Testing    | [Vitest](https://vitest.dev/), [Playwright](https://playwright.dev/) + axe-core, GitHub Actions |
+| Data       | [Rick and Morty API](https://rickandmortyapi.com/)                                              |
 
 ## Getting started
 
@@ -82,16 +82,16 @@ Visit [http://localhost:3000](http://localhost:3000).
 
 ### Available scripts
 
-| Command             | Description                       |
-| ------------------- | --------------------------------- |
-| `pnpm dev`          | Start the dev server              |
-| `pnpm build`        | Production build                  |
-| `pnpm start`        | Run the production build          |
-| `pnpm lint`         | Lint the codebase                 |
-| `pnpm format`       | Format the codebase with Prettier |
-| `pnpm format:check` | Check formatting without writing  |
-| `pnpm test`         | Run the unit test suite (Vitest)  |
-| `pnpm test:e2e`     | Run the Playwright smoke test     |
+| Command             | Description                        |
+| ------------------- | ---------------------------------- |
+| `pnpm dev`          | Start the dev server               |
+| `pnpm build`        | Production build                   |
+| `pnpm start`        | Run the production build           |
+| `pnpm lint`         | Lint the codebase                  |
+| `pnpm format`       | Format the codebase with Prettier  |
+| `pnpm format:check` | Check formatting without writing   |
+| `pnpm test`         | Run the unit test suite (Vitest)   |
+| `pnpm test:e2e`     | Run the browser suite (Playwright) |
 
 ## Project structure
 
@@ -110,7 +110,7 @@ lib/
   security/                Content-Security-Policy construction
   theme/  viewport/        useSyncExternalStore-backed browser state
 proxy.ts                   Per-request CSP nonce
-e2e/                       Playwright smoke test
+e2e/                       Browser tests: chat streaming + accessibility
 types/                     Shared domain and chat-protocol types
 ```
 
@@ -184,7 +184,9 @@ If you are on a character's detail page, the client sends that character's id. T
 
 `'unsafe-inline'` in `script-src` lets any injected `<script>` execute, which is precisely the payload an XSS delivers - so the production policy does not contain it. [`proxy.ts`](proxy.ts) mints a nonce per request and puts the resulting policy on both the request (which is how Next stamps the nonce onto its own script tags) and the response (which is what the browser enforces). Development keeps the permissive policy: the dev server injects its own inline scripts and React's dev build needs `eval()`, and a nonce cannot simply be added on top, because browsers ignore `'unsafe-inline'` as soon as a nonce is present.
 
-This is why every route renders dynamically. A nonce baked in at build time would be identical for every visitor and would defend against nothing, so nonce-based CSP and static prerendering are mutually exclusive. Inline **styles** remain allowed: Next inlines critical CSS and the animation library writes element styles directly, and style injection is not a script-execution vector.
+This is why every route renders dynamically. A nonce baked in at build time would be identical for every visitor and would defend against nothing, so nonce-based CSP and static prerendering are mutually exclusive.
+
+Styles split the two vectors instead of allowing both. Injected `<style>` **elements** are blocked (`style-src-elem 'self' 'nonce-...'`) - the production build ships its CSS as a linked stylesheet, so nothing legitimate needs them. Style **attributes** stay allowed (`style-src-attr 'unsafe-inline'`) because the animation library writes transforms and opacity straight onto elements and a nonce cannot be attached to an attribute. Browsers too old for these directives fall back to `default-src 'self'`: stylesheets still load, only the animations go flat.
 
 ### Identifying clients for rate limiting
 
@@ -220,20 +222,19 @@ A focused Vitest suite covers the parts most worth guarding against regressions 
 
 Run them with `pnpm test`. Every push and pull request to `main` runs lint, a format check, the production build, and the test suite via [GitHub Actions](.github/workflows/ci.yml).
 
-### End-to-end smoke test
+### Browser tests
 
-[`e2e/chat.spec.ts`](e2e/chat.spec.ts) drives a real browser against the production build: it sends a chat message and asserts that a partial answer is on screen before the complete one, that the tool-call indicator appears while a lookup is in flight, and that a server error surfaces without taking the widget down. Run it with `pnpm test:e2e`.
+Two suites run in a real browser against the production build, in a CI job of their own so the fast lint-and-unit feedback is never queued behind a browser download.
+
+[`e2e/a11y.spec.ts`](e2e/a11y.spec.ts) runs [axe-core](https://github.com/dequelabs/axe-core) over the home page, a character detail page, and the open chat widget, in **both colour themes** - they are separate palettes, so a contrast regression in one is invisible from the other. Only serious and critical violations fail the build: a suite that fails on advisory findings gets muted rather than fixed. It caught three real WCAG AA contrast failures in the light theme, all since corrected.
+
+[`e2e/chat.spec.ts`](e2e/chat.spec.ts) drives the chat against the production build: it sends a chat message and asserts that a partial answer is on screen before the complete one, that the tool-call indicator appears while a lookup is in flight, and that a server error surfaces without taking the widget down. Run it with `pnpm test:e2e`.
 
 The chat endpoint is stubbed by replacing `fetch`, not by intercepting the network. Two reasons: the assistant runs on Gemini's free tier, whose per-model daily allowance a test suite would drain in a handful of runs; and Playwright's route fulfilment delivers a response body in one piece, which would collapse the exchange into a single tick and make the streaming behaviour - the whole point of the test - impossible to observe. Everything downstream of `fetch` is production code, including the nonce-based CSP, since the suite runs `pnpm build && pnpm start` rather than the dev server.
 
-It is deliberately not in CI: it needs a browser download and a full production build, which is a poor trade for a job that runs on every push. To add it, append this step to [the workflow](.github/workflows/ci.yml) after the existing test step:
+Both suites run on every push and pull request via the `e2e` job in [the workflow](.github/workflows/ci.yml), alongside the `unit` job rather than inside it. The Playwright HTML report is uploaded as an artifact so a CI failure can be inspected without reproducing it locally.
 
-```yaml
-- name: Install Playwright browser
-  run: pnpm exec playwright install --with-deps chromium
-- name: End-to-end smoke test
-  run: pnpm test:e2e
-```
+Dependency updates are automated with [Dependabot](.github/dependabot.yml): minor and patch bumps arrive weekly as one grouped pull request that CI vets on its own, while majors come individually because framework migrations deserve to be read one at a time.
 
 ## Known limitations
 
