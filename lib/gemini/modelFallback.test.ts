@@ -11,52 +11,60 @@ const modelsTried = (open: { mock: { calls: unknown[][] } }) =>
   open.mock.calls.map((call) => call[0]);
 
 describe("withModelFallback", () => {
-  it("uses the first model when it works and never touches the fallback", async () => {
+  it("uses the first model when it works and never touches the others", async () => {
     const open = vi.fn().mockResolvedValue("stream");
 
-    const result = await withModelFallback(["primary", "fallback"], open);
+    const result = await withModelFallback(["primary", "second", "third"], open);
 
     expect(result).toEqual({ value: "stream", model: "primary" });
-    expect(open).toHaveBeenCalledTimes(1);
     expect(modelsTried(open)).toEqual(["primary"]);
   });
 
-  it("retries the same model when it is temporarily overloaded", async () => {
+  it("moves to the next model rather than retrying an overloaded one", async () => {
     const open = vi.fn().mockRejectedValueOnce(overloaded()).mockResolvedValue("stream");
 
-    const result = await withModelFallback(["primary", "fallback"], open);
+    const result = await withModelFallback(["primary", "second", "third"], open);
 
-    expect(result.model).toBe("primary");
-    expect(modelsTried(open)).toEqual(["primary", "primary"]);
+    expect(result.model).toBe("second");
+    expect(modelsTried(open)).toEqual(["primary", "second"]);
   });
 
-  it("moves to the fallback model once the primary exhausts its attempts", async () => {
+  it("sweeps every model before giving any of them a second attempt", async () => {
     const open = vi
       .fn()
       .mockRejectedValueOnce(overloaded())
       .mockRejectedValueOnce(overloaded())
       .mockResolvedValue("stream");
 
-    const result = await withModelFallback(["primary", "fallback"], open);
+    const result = await withModelFallback(["primary", "second"], open);
 
-    expect(result).toEqual({ value: "stream", model: "fallback" });
-    expect(modelsTried(open)).toEqual(["primary", "primary", "fallback"]);
+    // "primary" is only revisited after "second" has also been tried.
+    expect(result.model).toBe("primary");
+    expect(modelsTried(open)).toEqual(["primary", "second", "primary"]);
   });
 
-  it("skips retries on a spent quota and goes straight to the other model", async () => {
-    const open = vi.fn().mockRejectedValueOnce(quotaSpent()).mockResolvedValue("stream");
+  it("retries a single pinned model when there is nothing to fall back to", async () => {
+    const open = vi.fn().mockRejectedValueOnce(overloaded()).mockResolvedValue("stream");
 
-    const result = await withModelFallback(["primary", "fallback"], open);
+    const result = await withModelFallback(["pinned"], open);
 
-    // Quota does not recover in milliseconds, so "primary" is tried only once.
-    expect(result.model).toBe("fallback");
-    expect(modelsTried(open)).toEqual(["primary", "fallback"]);
+    expect(result.model).toBe("pinned");
+    expect(modelsTried(open)).toEqual(["pinned", "pinned"]);
   });
 
-  it("rethrows a genuine error immediately instead of burning attempts", async () => {
+  it("drops a model whose daily quota is spent instead of revisiting it", async () => {
+    const open = vi.fn().mockRejectedValueOnce(quotaSpent()).mockRejectedValue(overloaded());
+
+    await expect(withModelFallback(["primary", "second"], open)).rejects.toThrow("UNAVAILABLE");
+
+    // Quota does not recover mid-request, so "primary" is never tried again.
+    expect(modelsTried(open)).toEqual(["primary", "second", "second"]);
+  });
+
+  it("rethrows a genuine error immediately instead of burning the budget", async () => {
     const open = vi.fn().mockRejectedValue(new Error("400 INVALID_ARGUMENT"));
 
-    await expect(withModelFallback(["primary", "fallback"], open)).rejects.toThrow(
+    await expect(withModelFallback(["primary", "second"], open)).rejects.toThrow(
       "INVALID_ARGUMENT",
     );
     expect(open).toHaveBeenCalledTimes(1);
@@ -65,8 +73,8 @@ describe("withModelFallback", () => {
   it("surfaces the last failure when every model is unavailable", async () => {
     const open = vi.fn().mockRejectedValue(overloaded());
 
-    await expect(withModelFallback(["primary", "fallback"], open)).rejects.toThrow("UNAVAILABLE");
-    expect(open).toHaveBeenCalledTimes(4);
+    await expect(withModelFallback(["primary", "second"], open)).rejects.toThrow("UNAVAILABLE");
+    expect(modelsTried(open)).toEqual(["primary", "second", "primary", "second"]);
   });
 });
 
@@ -95,11 +103,10 @@ describe("withModelFallback time budget", () => {
     const open = vi
       .fn()
       .mockRejectedValueOnce(new GeminiTimeoutError("primary", 15_000))
-      .mockRejectedValueOnce(new GeminiTimeoutError("primary", 15_000))
       .mockResolvedValue("stream");
 
-    const result = await withModelFallback(["primary", "fallback"], open);
+    const result = await withModelFallback(["primary", "second"], open);
 
-    expect(result.model).toBe("fallback");
+    expect(result.model).toBe("second");
   });
 });

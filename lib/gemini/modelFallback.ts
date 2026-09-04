@@ -1,5 +1,5 @@
 import {
-  GEMINI_MAX_ATTEMPTS_PER_MODEL,
+  GEMINI_MAX_PASSES,
   GEMINI_MIN_OPEN_TIMEOUT_MS,
   GEMINI_OPEN_TIMEOUT_MS,
   GEMINI_RETRY_BASE_DELAY_MS,
@@ -34,19 +34,22 @@ export function isQuotaError(error: unknown): boolean {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Runs `open` against each candidate model until one works.
+ * Runs `open` against candidate models until one works, sweeping the whole list
+ * before retrying anything: a 503 means *this* model is swamped, so reaching for
+ * a different one recovers faster than waiting on the same one twice.
  *
- * Google's free tier produces two failures worth handling differently: a model
- * that is temporarily overloaded (503 - retry it, the spike usually passes) and
- * one whose daily quota is spent (429 - retrying is pointless, but a different
- * model has its own separate allowance). Anything else is a real bug and is
- * rethrown immediately rather than burning attempts on it.
+ * The free tier produces two failures worth handling differently. An overloaded
+ * model (503) is temporary, so it stays in the rotation for the next pass. A
+ * model whose daily quota is spent (429) will not recover during this request,
+ * so it is dropped - but another model has its own separate allowance, which is
+ * the only headroom a free key has. Anything else is a real bug and is rethrown
+ * immediately rather than burning the budget on it.
  *
- * Every attempt gets a slice of a shared time budget, so a model that stalls
- * cannot spend the whole budget on its own and starve the fallback.
+ * Every attempt draws from one shared time budget, so a model that stalls cannot
+ * spend it all and starve the models behind it.
  *
  * Callers must only use this for work that has produced no user-visible output
- * yet, since a retry restarts that work from scratch.
+ * yet, since moving on restarts that work from scratch.
  */
 export async function withModelFallback<T>(
   models: string[],
@@ -54,10 +57,17 @@ export async function withModelFallback<T>(
   budgetMs: number = GEMINI_TOTAL_BUDGET_MS,
 ): Promise<{ value: T; model: string }> {
   const deadline = Date.now() + budgetMs;
+  const rotation = [...models];
   let lastError: unknown;
 
-  for (const model of models) {
-    for (let attempt = 0; attempt < GEMINI_MAX_ATTEMPTS_PER_MODEL; attempt++) {
+  for (let pass = 0; pass < GEMINI_MAX_PASSES && rotation.length > 0; pass++) {
+    if (pass > 0) {
+      const delay = GEMINI_RETRY_BASE_DELAY_MS * 2 ** (pass - 1);
+      if (deadline - Date.now() <= delay) break;
+      await sleep(delay);
+    }
+
+    for (const model of [...rotation]) {
       const timeoutMs = Math.min(GEMINI_OPEN_TIMEOUT_MS, deadline - Date.now());
       // Too little left to be worth starting: fail with what we already know
       // rather than burning the remainder on an attempt that cannot finish.
@@ -68,13 +78,17 @@ export async function withModelFallback<T>(
       try {
         return { value: await open(model, timeoutMs), model };
       } catch (error) {
+        // The user only ever sees a friendly summary, so without this the
+        // provider's actual reason for refusing is lost and a production
+        // outage is indistinguishable from a bug in this file.
+        console.error(`Gemini model "${model}" failed:`, error);
         lastError = error;
 
-        if (isQuotaError(error)) break;
-        if (!isOverloadedError(error)) throw error;
-
-        const isLastAttempt = attempt === GEMINI_MAX_ATTEMPTS_PER_MODEL - 1;
-        if (!isLastAttempt) await sleep(GEMINI_RETRY_BASE_DELAY_MS * 2 ** attempt);
+        if (isQuotaError(error)) {
+          rotation.splice(rotation.indexOf(model), 1);
+        } else if (!isOverloadedError(error)) {
+          throw error;
+        }
       }
     }
   }

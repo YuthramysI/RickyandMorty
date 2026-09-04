@@ -14,13 +14,13 @@ import { friendlyGeminiErrorMessage } from "./errors";
 import { GeminiTimeoutError, withModelFallback } from "./modelFallback";
 import {
   CHAT_MAX_TOOL_ROUNDS,
-  GEMINI_FALLBACK_MODEL,
+  GEMINI_FALLBACK_MODELS,
   GEMINI_MODEL,
   GEMINI_TOTAL_BUDGET_MS,
 } from "@/lib/constants";
 import type { CharacterContext, ChatMessage, ChatStreamEvent } from "@/types/chat";
 
-const MODEL_CANDIDATES = [...new Set([GEMINI_MODEL, GEMINI_FALLBACK_MODEL])];
+const MODEL_CANDIDATES = [...new Set([GEMINI_MODEL, ...GEMINI_FALLBACK_MODELS])];
 
 type ContentStream = Awaited<ReturnType<GoogleGenAI["models"]["generateContentStream"]>>;
 

@@ -3,14 +3,22 @@
 export const RICK_AND_MORTY_API_BASE =
   process.env.RICKANDMORTY_API_BASE || "https://rickandmortyapi.com/api";
 
-export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
+export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
 
-// Individual Gemini models go temporarily unavailable (503) and each carries its
-// own separate daily free-tier quota, so a second model is the difference
-// between a degraded answer and no answer at all.
-export const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash";
+// On the free tier a model's daily quota and its availability are both per
+// model, not per account, and outages hit individual models for hours at a
+// time. Spreading across a few of them is the only reliability lever a free
+// key actually has. Comma-separated so a deployment can retune without a build.
+export const GEMINI_FALLBACK_MODELS = (
+  process.env.GEMINI_FALLBACK_MODELS || "gemini-3.6-flash,gemini-3.5-flash,gemini-3.8-flash"
+)
+  .split(",")
+  .map((model) => model.trim())
+  .filter(Boolean);
 
-export const GEMINI_MAX_ATTEMPTS_PER_MODEL = 2;
+// Trying a *different* model beats retrying a swamped one, so each pass sweeps
+// the whole list before any model is attempted a second time.
+export const GEMINI_MAX_PASSES = 2;
 export const GEMINI_RETRY_BASE_DELAY_MS = 600;
 
 // An overloaded model sometimes stalls instead of rejecting. Without a cap the
