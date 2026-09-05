@@ -1,6 +1,8 @@
 {
   "name": "rick-and-morty-explorer",
   "version": "0.1.0",
+  "description": "Browse the Rick and Morty multiverse and chat with an AI assistant that looks up real character and episode data.",
+  "license": "MIT",
   "private": true,
   "scripts": {
     "dev": "next dev",

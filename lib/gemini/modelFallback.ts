@@ -20,14 +20,14 @@ function rawMessage(error: unknown): string {
 }
 
 /** The model is up but swamped. Temporary by definition - worth waiting for. */
-export function isOverloadedError(error: unknown): boolean {
+function isOverloadedError(error: unknown): boolean {
   if (error instanceof GeminiTimeoutError) return true;
   const raw = rawMessage(error);
   return raw.includes("UNAVAILABLE") || raw.includes("503");
 }
 
 /** The daily free-tier allowance for this model is spent. Retrying won't help. */
-export function isQuotaError(error: unknown): boolean {
+function isQuotaError(error: unknown): boolean {
   const raw = rawMessage(error);
   return raw.includes("RESOURCE_EXHAUSTED") || raw.includes("429") || raw.includes("quota");
 }

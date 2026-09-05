@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { checkClientRateLimit, getClientIdentity } from "@/lib/chat/rateLimit";
 import { chatRequestSchema } from "@/lib/chat/validation";
-import { streamToResponse } from "@/lib/chat/sse";
+import { streamToResponse } from "@/lib/chat/stream";
 import { orchestrateChat } from "@/lib/gemini/orchestrate";
 
 export const runtime = "nodejs";

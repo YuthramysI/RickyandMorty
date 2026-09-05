@@ -17,15 +17,15 @@ Browse the Rick and Morty multiverse and chat with an AI assistant that looks up
 
 It is a small app, but every part of it is built the way a production feature would be. If you are evaluating the code, these are the parts worth reading:
 
-| Area                      | What to look at                                                                                                                                             |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **LLM function calling**  | A real tool-calling loop against a live API - not a wrapper around a single prompt. [`lib/gemini/orchestrate.ts`](lib/gemini/orchestrate.ts)                |
-| **Streaming**             | Hand-rolled NDJSON streaming over POST, consumed incrementally in the browser. [`lib/chat/sse.ts`](lib/chat/sse.ts), [`hooks/useChat.ts`](hooks/useChat.ts) |
-| **Resilient networking**  | Retries with exponential backoff, a total time budget, and a concurrency limiter. [`lib/rickandmorty/client.ts`](lib/rickandmorty/client.ts)                |
-| **Secret handling**       | The API key is read only inside a Route Handler and never crosses to the client. [Details below](#keeping-the-api-key-server-only)                          |
-| **Defensive server code** | Zod-validated input, spoof-resistant rate limiting, capped tool rounds, nonce-based CSP. [Details below](#security)                                         |
-| **Real-world edge cases** | Cached upstream 404s, browser auto-translate crashes, mobile viewport insets. [Details below](#engineering-notes)                                           |
-| **Tests + CI**            | Vitest suite on the logic that actually breaks, gated on every push. [Details below](#testing--ci)                                                          |
+| Area                      | What to look at                                                                                                                                                   |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **LLM function calling**  | A real tool-calling loop against a live API - not a wrapper around a single prompt. [`lib/gemini/orchestrate.ts`](lib/gemini/orchestrate.ts)                      |
+| **Streaming**             | Hand-rolled NDJSON streaming over POST, consumed incrementally in the browser. [`lib/chat/stream.ts`](lib/chat/stream.ts), [`hooks/useChat.ts`](hooks/useChat.ts) |
+| **Resilient networking**  | Retries with exponential backoff, a total time budget, and a concurrency limiter. [`lib/rickandmorty/client.ts`](lib/rickandmorty/client.ts)                      |
+| **Secret handling**       | The API key is read only inside a Route Handler and never crosses to the client. [Details below](#keeping-the-api-key-server-only)                                |
+| **Defensive server code** | Zod-validated input, spoof-resistant rate limiting, capped tool rounds, nonce-based CSP. [Details below](#security)                                               |
+| **Real-world edge cases** | Cached upstream 404s, browser auto-translate crashes, mobile viewport insets. [Details below](#engineering-notes)                                                 |
+| **Tests + CI**            | Vitest suite on the logic that actually breaks, gated on every push. [Details below](#testing--ci)                                                                |
 
 ## Features
 
@@ -219,6 +219,7 @@ A focused Vitest suite covers the parts most worth guarding against regressions 
 | [`lib/gemini/orchestrate.test.ts`](lib/gemini/orchestrate.test.ts)     | The tool-calling loop against a mocked model                         |
 | [`app/api/chat/route.test.ts`](app/api/chat/route.test.ts)             | Endpoint contract: 400, 429, 503, and the streaming 200              |
 | [`lib/gemini/modelFallback.test.ts`](lib/gemini/modelFallback.test.ts) | Retry, model fallback, and budget policy                             |
+| [`lib/security/csp.test.ts`](lib/security/csp.test.ts)                 | That the shipped policy never allows inline scripts                  |
 
 Run them with `pnpm test`. Every push and pull request to `main` runs lint, a format check, the production build, and the test suite via [GitHub Actions](.github/workflows/ci.yml).
 
