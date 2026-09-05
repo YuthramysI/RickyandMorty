@@ -39,8 +39,6 @@ export const GEMINI_QUOTA_COOLDOWN_MS = 300_000;
 export const GEMINI_TOTAL_BUDGET_MS = 60_000;
 export const GEMINI_MIN_OPEN_TIMEOUT_MS = 3_000;
 
-export const CHARACTERS_PAGE_SIZE = 20;
-
 export const CHAT_MAX_MESSAGES = 20;
 export const CHAT_MAX_MESSAGE_LENGTH = 2000;
 export const CHAT_MAX_TOOL_ROUNDS = 5;
