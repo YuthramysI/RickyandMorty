@@ -11,7 +11,7 @@ jobs:
     name: Lint, build & unit tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # No `version` here - pnpm/action-setup reads it from package.json's
       # "packageManager" field, and passing both makes it refuse to start.
@@ -35,7 +35,7 @@ jobs:
     name: End-to-end & accessibility
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v4
 
